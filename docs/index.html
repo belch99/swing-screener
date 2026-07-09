@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>20/50 Weekly SMA Screener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0E11;
+    --surface: #12161B;
+    --surface-raised: #171C22;
+    --line: #232A31;
+    --text: #E6EDF3;
+    --text-dim: #7C8B9B;
+    --accent: #3DDC84;
+    --accent-dim: #1E5E3B;
+    --amber: #F0A83B;
+    --red: #E5484D;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+  .tape-wrap {
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    white-space: nowrap;
+    padding: 10px 0;
+  }
+  .tape-track {
+    display: inline-flex;
+    animation: scroll 40s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tape-track { animation: none; overflow-x: auto; }
+  }
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  .tape-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 24px;
+    border-right: 1px solid var(--line);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+  }
+  .tape-empty { color: var(--text-dim); letter-spacing: 0.06em; }
+  .tape-ticker { color: var(--text); font-weight: 600; }
+  .tape-price { color: var(--text-dim); }
+
+  .top-nav {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 24px 0;
+    display: flex;
+    gap: 8px;
+  }
+  .nav-tab {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    border-radius: 100px;
+    padding: 8px 18px;
+    transition: all 0.15s ease;
+  }
+  .nav-tab:hover { color: var(--text); border-color: var(--text-dim); }
+  .nav-tab-active {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  header {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 32px;
+  }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 40px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 10px;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 15px;
+    max-width: 620px;
+    line-height: 1.55;
+  }
+  .meta-row {
+    display: flex;
+    gap: 32px;
+    margin-top: 28px;
+    flex-wrap: wrap;
+  }
+  .meta-item {
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .meta-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .meta-value {
+    font-size: 20px;
+    color: var(--text);
+    font-weight: 500;
+  }
+  .meta-value.accent { color: var(--accent); }
+
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  .criteria {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+  }
+  .chip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    border-radius: 100px;
+    padding: 6px 14px;
+    background: var(--surface);
+  }
+
+  table.results {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table.results thead th {
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-raised);
+  }
+  table.results th.num, table.results td.num { text-align: right; }
+  table.results tbody tr {
+    border-bottom: 1px solid var(--line);
+    transition: background 0.15s ease;
+  }
+  table.results tbody tr:last-child { border-bottom: none; }
+  table.results tbody tr:hover { background: var(--surface-raised); }
+  table.results td {
+    padding: 14px 18px;
+    font-size: 14px;
+  }
+  td.col-ticker {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  td.mono { font-family: 'IBM Plex Mono', monospace; color: var(--text-dim); }
+  td.mono.num { color: var(--text); }
+
+  .empty-state {
+    text-align: center;
+    padding: 90px 24px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+  }
+  .empty-glyph {
+    font-size: 32px;
+    color: var(--accent-dim);
+    margin-bottom: 16px;
+  }
+  .empty-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .empty-sub {
+    color: var(--text-dim);
+    font-size: 14px;
+    max-width: 380px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  footer {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 60px;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  @media (max-width: 700px) {
+    h1 { font-size: 30px; }
+    table.results { display: block; overflow-x: auto; }
+    .meta-row { gap: 20px; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="tape-wrap">
+    <div class="tape-track"><span class="tape-item"><span class="tape-ticker">AUDC</span><span class="tape-price">$9.61</span></span><span class="tape-item"><span class="tape-ticker">BLMN</span><span class="tape-price">$7.77</span></span><span class="tape-item"><span class="tape-ticker">BLZE</span><span class="tape-price">$16.42</span></span><span class="tape-item"><span class="tape-ticker">BZH</span><span class="tape-price">$31.01</span></span><span class="tape-item"><span class="tape-ticker">CCRN</span><span class="tape-price">$13.20</span></span><span class="tape-item"><span class="tape-ticker">CLSK</span><span class="tape-price">$12.40</span></span><span class="tape-item"><span class="tape-ticker">CRL</span><span class="tape-price">$223.96</span></span><span class="tape-item"><span class="tape-ticker">CRSR</span><span class="tape-price">$8.86</span></span><span class="tape-item"><span class="tape-ticker">CVSA</span><span class="tape-price">$130.85</span></span><span class="tape-item"><span class="tape-ticker">DMRC</span><span class="tape-price">$7.08</span></span><span class="tape-item"><span class="tape-ticker">FIRY</span><span class="tape-price">$9.23</span></span><span class="tape-item"><span class="tape-ticker">GBTG</span><span class="tape-price">$9.40</span></span><span class="tape-item"><span class="tape-ticker">HAE</span><span class="tape-price">$73.82</span></span><span class="tape-item"><span class="tape-ticker">HUM</span><span class="tape-price">$396.29</span></span><span class="tape-item"><span class="tape-ticker">IART</span><span class="tape-price">$17.30</span></span><span class="tape-item"><span class="tape-ticker">INVH</span><span class="tape-price">$29.63</span></span><span class="tape-item"><span class="tape-ticker">PRVA</span><span class="tape-price">$27.21</span></span><span class="tape-item"><span class="tape-ticker">RDCM</span><span class="tape-price">$14.19</span></span><span class="tape-item"><span class="tape-ticker">RVTY</span><span class="tape-price">$109.35</span></span><span class="tape-item"><span class="tape-ticker">SKWD</span><span class="tape-price">$60.37</span></span><span class="tape-item"><span class="tape-ticker">SXC</span><span class="tape-price">$8.14</span></span><span class="tape-item"><span class="tape-ticker">VCEL</span><span class="tape-price">$47.02</span></span><span class="tape-item"><span class="tape-ticker">VKTX</span><span class="tape-price">$39.96</span></span><span class="tape-item"><span class="tape-ticker">XYZ</span><span class="tape-price">$76.55</span></span><span class="tape-item"><span class="tape-ticker">AUDC</span><span class="tape-price">$9.61</span></span><span class="tape-item"><span class="tape-ticker">BLMN</span><span class="tape-price">$7.77</span></span><span class="tape-item"><span class="tape-ticker">BLZE</span><span class="tape-price">$16.42</span></span><span class="tape-item"><span class="tape-ticker">BZH</span><span class="tape-price">$31.01</span></span><span class="tape-item"><span class="tape-ticker">CCRN</span><span class="tape-price">$13.20</span></span><span class="tape-item"><span class="tape-ticker">CLSK</span><span class="tape-price">$12.40</span></span><span class="tape-item"><span class="tape-ticker">CRL</span><span class="tape-price">$223.96</span></span><span class="tape-item"><span class="tape-ticker">CRSR</span><span class="tape-price">$8.86</span></span><span class="tape-item"><span class="tape-ticker">CVSA</span><span class="tape-price">$130.85</span></span><span class="tape-item"><span class="tape-ticker">DMRC</span><span class="tape-price">$7.08</span></span><span class="tape-item"><span class="tape-ticker">FIRY</span><span class="tape-price">$9.23</span></span><span class="tape-item"><span class="tape-ticker">GBTG</span><span class="tape-price">$9.40</span></span><span class="tape-item"><span class="tape-ticker">HAE</span><span class="tape-price">$73.82</span></span><span class="tape-item"><span class="tape-ticker">HUM</span><span class="tape-price">$396.29</span></span><span class="tape-item"><span class="tape-ticker">IART</span><span class="tape-price">$17.30</span></span><span class="tape-item"><span class="tape-ticker">INVH</span><span class="tape-price">$29.63</span></span><span class="tape-item"><span class="tape-ticker">PRVA</span><span class="tape-price">$27.21</span></span><span class="tape-item"><span class="tape-ticker">RDCM</span><span class="tape-price">$14.19</span></span><span class="tape-item"><span class="tape-ticker">RVTY</span><span class="tape-price">$109.35</span></span><span class="tape-item"><span class="tape-ticker">SKWD</span><span class="tape-price">$60.37</span></span><span class="tape-item"><span class="tape-ticker">SXC</span><span class="tape-price">$8.14</span></span><span class="tape-item"><span class="tape-ticker">VCEL</span><span class="tape-price">$47.02</span></span><span class="tape-item"><span class="tape-ticker">VKTX</span><span class="tape-price">$39.96</span></span><span class="tape-item"><span class="tape-ticker">XYZ</span><span class="tape-price">$76.55</span></span></div>
+  </div>
+  
+    <nav class="top-nav">
+      <a class="nav-tab nav-tab-active" href="index.html">Weekly</a>
+      <a class="nav-tab" href="daily.html">Daily</a>
+    </nav>
+
+  <header>
+    <div class="eyebrow">Weekly Scan · Golden Cross</div>
+    <h1>20/50 Weekly SMA Screener</h1>
+    <p class="sub">Scans every NASDAQ and NYSE listed stock for a 20-week SMA closing above the 50-week SMA on the most recently closed weekly bar — filtered for price above $5 and average volume above 500K.</p>
+    <div class="meta-row">
+      <div class="meta-item">
+        <div class="meta-label">Last run</div>
+        <div class="meta-value">Jul 09, 2026 — 03:02 UTC</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Matches</div>
+        <div class="meta-value accent">24</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="criteria">
+      <span class="chip">Price &gt; $5</span>
+      <span class="chip">20W Avg Vol &gt; 500K</span>
+      <span class="chip">Fresh cross only</span>
+    </div>
+    
+        <table class="results">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Cross Date</th>
+              <th class="num">Close</th>
+              <th class="num">SMA 20</th>
+              <th class="num">SMA 50</th>
+              <th class="num">Avg Vol</th>
+              <th class="num">Last Vol</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+          <td class="col-ticker">AUDC</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$9.61</td>
+          <td class="mono num">8.93</td>
+          <td class="mono num">8.84</td>
+          <td class="mono num">550,817</td>
+          <td class="mono num">401,740</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">BLMN</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$7.77</td>
+          <td class="mono num">7.02</td>
+          <td class="mono num">7.01</td>
+          <td class="mono num">13,160,698</td>
+          <td class="mono num">7,906,760</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">BLZE</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$16.42</td>
+          <td class="mono num">6.95</td>
+          <td class="mono num">6.76</td>
+          <td class="mono num">11,273,404</td>
+          <td class="mono num">8,529,593</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">BZH</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$31.01</td>
+          <td class="mono num">23.62</td>
+          <td class="mono num">23.59</td>
+          <td class="mono num">2,659,094</td>
+          <td class="mono num">4,066,588</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">CCRN</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$13.20</td>
+          <td class="mono num">11.35</td>
+          <td class="mono num">11.15</td>
+          <td class="mono num">3,020,806</td>
+          <td class="mono num">1,471,638</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">CLSK</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$12.40</td>
+          <td class="mono num">12.75</td>
+          <td class="mono num">12.73</td>
+          <td class="mono num">98,432,231</td>
+          <td class="mono num">53,943,831</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">CRL</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$223.96</td>
+          <td class="mono num">179.20</td>
+          <td class="mono num">179.09</td>
+          <td class="mono num">4,262,803</td>
+          <td class="mono num">2,809,062</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">CRSR</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$8.86</td>
+          <td class="mono num">7.29</td>
+          <td class="mono num">7.20</td>
+          <td class="mono num">9,993,296</td>
+          <td class="mono num">6,148,734</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">CVSA</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$130.85</td>
+          <td class="mono num">117.88</td>
+          <td class="mono num">117.46</td>
+          <td class="mono num">1,620,892</td>
+          <td class="mono num">1,354,147</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">DMRC</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$7.08</td>
+          <td class="mono num">8.21</td>
+          <td class="mono num">8.16</td>
+          <td class="mono num">1,181,176</td>
+          <td class="mono num">920,939</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">FIRY</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$9.23</td>
+          <td class="mono num">6.23</td>
+          <td class="mono num">6.15</td>
+          <td class="mono num">4,129,285</td>
+          <td class="mono num">372,516</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">GBTG</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$9.40</td>
+          <td class="mono num">7.52</td>
+          <td class="mono num">7.51</td>
+          <td class="mono num">15,768,125</td>
+          <td class="mono num">7,541,606</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">HAE</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$73.82</td>
+          <td class="mono num">64.47</td>
+          <td class="mono num">64.34</td>
+          <td class="mono num">4,016,330</td>
+          <td class="mono num">2,167,906</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">HUM</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$396.29</td>
+          <td class="mono num">267.25</td>
+          <td class="mono num">260.30</td>
+          <td class="mono num">7,897,258</td>
+          <td class="mono num">4,205,970</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">IART</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$17.30</td>
+          <td class="mono num">13.31</td>
+          <td class="mono num">13.24</td>
+          <td class="mono num">4,576,045</td>
+          <td class="mono num">3,382,706</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">INVH</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$29.63</td>
+          <td class="mono num">27.43</td>
+          <td class="mono num">27.42</td>
+          <td class="mono num">28,963,940</td>
+          <td class="mono num">12,450,508</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">PRVA</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$27.21</td>
+          <td class="mono num">23.27</td>
+          <td class="mono num">23.25</td>
+          <td class="mono num">4,879,414</td>
+          <td class="mono num">4,873,891</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">RDCM</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$14.19</td>
+          <td class="mono num">13.37</td>
+          <td class="mono num">13.29</td>
+          <td class="mono num">790,552</td>
+          <td class="mono num">330,941</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">RVTY</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$109.35</td>
+          <td class="mono num">96.07</td>
+          <td class="mono num">95.89</td>
+          <td class="mono num">6,205,141</td>
+          <td class="mono num">4,050,437</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">SKWD</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$60.37</td>
+          <td class="mono num">48.16</td>
+          <td class="mono num">47.81</td>
+          <td class="mono num">2,368,694</td>
+          <td class="mono num">2,408,281</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">SXC</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$8.14</td>
+          <td class="mono num">7.29</td>
+          <td class="mono num">7.27</td>
+          <td class="mono num">8,505,504</td>
+          <td class="mono num">4,120,591</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">VCEL</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$47.02</td>
+          <td class="mono num">36.30</td>
+          <td class="mono num">36.15</td>
+          <td class="mono num">3,162,959</td>
+          <td class="mono num">2,339,886</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">VKTX</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$39.96</td>
+          <td class="mono num">33.13</td>
+          <td class="mono num">32.89</td>
+          <td class="mono num">11,704,573</td>
+          <td class="mono num">13,104,873</td>
+        </tr>
+        <tr>
+          <td class="col-ticker">XYZ</td>
+          <td class="mono">2026-07-06</td>
+          <td class="mono num">$76.55</td>
+          <td class="mono num">68.83</td>
+          <td class="mono num">68.77</td>
+          <td class="mono num">33,149,042</td>
+          <td class="mono num">18,610,855</td>
+        </tr>
+          </tbody>
+        </table>
+  </main>
+
+  <footer>
+    NASDAQ + NYSE · Data via Yahoo Finance · Runs every Saturday via GitHub Actions
+  </footer>
+
+<script>
+  window.SCREENER_DATA = [{"ticker": "AUDC", "close_date": "2026-07-06", "close": 9.61, "sma20": 8.93, "sma50": 8.84, "avg_vol": 550817, "last_vol": 401740}, {"ticker": "BLMN", "close_date": "2026-07-06", "close": 7.77, "sma20": 7.02, "sma50": 7.01, "avg_vol": 13160698, "last_vol": 7906760}, {"ticker": "BLZE", "close_date": "2026-07-06", "close": 16.42, "sma20": 6.95, "sma50": 6.76, "avg_vol": 11273404, "last_vol": 8529593}, {"ticker": "BZH", "close_date": "2026-07-06", "close": 31.01, "sma20": 23.62, "sma50": 23.59, "avg_vol": 2659094, "last_vol": 4066588}, {"ticker": "CCRN", "close_date": "2026-07-06", "close": 13.2, "sma20": 11.35, "sma50": 11.15, "avg_vol": 3020806, "last_vol": 1471638}, {"ticker": "CLSK", "close_date": "2026-07-06", "close": 12.4, "sma20": 12.75, "sma50": 12.73, "avg_vol": 98432231, "last_vol": 53943831}, {"ticker": "CRL", "close_date": "2026-07-06", "close": 223.96, "sma20": 179.2, "sma50": 179.09, "avg_vol": 4262803, "last_vol": 2809062}, {"ticker": "CRSR", "close_date": "2026-07-06", "close": 8.86, "sma20": 7.29, "sma50": 7.2, "avg_vol": 9993296, "last_vol": 6148734}, {"ticker": "CVSA", "close_date": "2026-07-06", "close": 130.85, "sma20": 117.88, "sma50": 117.46, "avg_vol": 1620892, "last_vol": 1354147}, {"ticker": "DMRC", "close_date": "2026-07-06", "close": 7.08, "sma20": 8.21, "sma50": 8.16, "avg_vol": 1181176, "last_vol": 920939}, {"ticker": "FIRY", "close_date": "2026-07-06", "close": 9.23, "sma20": 6.23, "sma50": 6.15, "avg_vol": 4129285, "last_vol": 372516}, {"ticker": "GBTG", "close_date": "2026-07-06", "close": 9.4, "sma20": 7.52, "sma50": 7.51, "avg_vol": 15768125, "last_vol": 7541606}, {"ticker": "HAE", "close_date": "2026-07-06", "close": 73.82, "sma20": 64.47, "sma50": 64.34, "avg_vol": 4016330, "last_vol": 2167906}, {"ticker": "HUM", "close_date": "2026-07-06", "close": 396.29, "sma20": 267.25, "sma50": 260.3, "avg_vol": 7897258, "last_vol": 4205970}, {"ticker": "IART", "close_date": "2026-07-06", "close": 17.3, "sma20": 13.31, "sma50": 13.24, "avg_vol": 4576045, "last_vol": 3382706}, {"ticker": "INVH", "close_date": "2026-07-06", "close": 29.63, "sma20": 27.43, "sma50": 27.42, "avg_vol": 28963940, "last_vol": 12450508}, {"ticker": "PRVA", "close_date": "2026-07-06", "close": 27.21, "sma20": 23.27, "sma50": 23.25, "avg_vol": 4879414, "last_vol": 4873891}, {"ticker": "RDCM", "close_date": "2026-07-06", "close": 14.19, "sma20": 13.37, "sma50": 13.29, "avg_vol": 790552, "last_vol": 330941}, {"ticker": "RVTY", "close_date": "2026-07-06", "close": 109.35, "sma20": 96.07, "sma50": 95.89, "avg_vol": 6205141, "last_vol": 4050437}, {"ticker": "SKWD", "close_date": "2026-07-06", "close": 60.37, "sma20": 48.16, "sma50": 47.81, "avg_vol": 2368694, "last_vol": 2408281}, {"ticker": "SXC", "close_date": "2026-07-06", "close": 8.14, "sma20": 7.29, "sma50": 7.27, "avg_vol": 8505504, "last_vol": 4120591}, {"ticker": "VCEL", "close_date": "2026-07-06", "close": 47.02, "sma20": 36.3, "sma50": 36.15, "avg_vol": 3162959, "last_vol": 2339886}, {"ticker": "VKTX", "close_date": "2026-07-06", "close": 39.96, "sma20": 33.13, "sma50": 32.89, "avg_vol": 11704573, "last_vol": 13104873}, {"ticker": "XYZ", "close_date": "2026-07-06", "close": 76.55, "sma20": 68.83, "sma50": 68.77, "avg_vol": 33149042, "last_vol": 18610855}];
+</script>
+</body>
+</html>
