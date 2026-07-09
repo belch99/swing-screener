@@ -1,0 +1,44 @@
+name: Weekly SMA Cross Screener
+
+on:
+  schedule:
+    # 13:00 UTC every Saturday = 9:00 AM ET (8:00 AM during EST) — adjust hour if you want a different local time
+    - cron: "0 13 * * 6"
+  workflow_dispatch: {}  # lets you click "Run workflow" manually anytime from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-screener
+  cancel-in-progress: true
+
+jobs:
+  scan-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install yfinance pandas
+
+      - name: Run screener
+        run: python weekly_sma_cross_screener.py --tickers all_tickers.csv
+
+      - name: Build dashboard
+        run: python generate_dashboard.py --mode weekly
+
+      - name: Commit and push results
+        run: |
+          git config user.name "screener-bot"
+          git config user.email "screener-bot@users.noreply.github.com"
+          git add docs/index.html weekly_cross_results.csv
+          git diff --quiet --cached || git commit -m "Weekly scan: $(date -u +'%Y-%m-%d')"
+          git push

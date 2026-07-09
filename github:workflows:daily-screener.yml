@@ -1,0 +1,41 @@
+name: Daily SMA Cross Screener
+
+on:
+  workflow_dispatch: {}  # manual only — click "Run workflow" yourself after each day's close
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-screener
+  cancel-in-progress: true
+
+jobs:
+  scan-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install yfinance pandas
+
+      - name: Run screener
+        run: python daily_sma_cross_screener.py --tickers all_tickers.csv
+
+      - name: Build dashboard
+        run: python generate_dashboard.py --mode daily
+
+      - name: Commit and push results
+        run: |
+          git config user.name "screener-bot"
+          git config user.email "screener-bot@users.noreply.github.com"
+          git add docs/daily.html daily_cross_results.csv
+          git diff --quiet --cached || git commit -m "Daily scan: $(date -u +'%Y-%m-%d')"
+          git push
