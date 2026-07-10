@@ -1,7 +1,12 @@
 name: Daily SMA Cross Screener
 
 on:
-  workflow_dispatch: {}  # manual only — click "Run workflow" yourself after each day's close
+  schedule:
+    # 20:15 UTC, Mon-Fri = 4:15 PM ET during EDT (summer). During EST (winter, roughly
+    # early Nov - mid March) this fires at 3:15 PM ET instead - change "15 20" to "15 21"
+    # when clocks fall back in November, and back to "15 20" when they spring forward in March.
+    - cron: "15 20 * * 1-5"
+  workflow_dispatch: {}  # also lets you click "Run workflow" manually anytime
 
 permissions:
   contents: write
