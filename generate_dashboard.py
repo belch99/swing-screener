@@ -22,7 +22,7 @@ MODES = {
         "eyebrow": "Weekly Scan · Golden Cross",
         "title": "20/50 Weekly SMA Screener",
         "sub": "Scans every NASDAQ and NYSE listed stock for a 20-week SMA closing above the 50-week SMA on the most recently closed weekly bar — filtered for price above $5 and average volume above 500K.",
-        "vol_chip": "20W Avg Vol &gt; 500K",
+        "chips": ["Price &gt; $5", "20W Avg Vol &gt; 500K", "Fresh cross only"],
         "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Runs every Saturday via GitHub Actions",
         "empty_sub": "The scan ran clean — no tickers met all three conditions this week. Check back next Saturday.",
     },
@@ -32,20 +32,33 @@ MODES = {
         "eyebrow": "Daily Scan · Golden Cross",
         "title": "20/50 Daily SMA Screener",
         "sub": "Scans every NASDAQ and NYSE listed stock for a 20-day SMA closing above the 50-day SMA on the most recently closed daily bar — filtered for price above $5 and average volume above 500K.",
-        "vol_chip": "20D Avg Vol &gt; 500K",
-        "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Manually triggered after each day's close",
+        "chips": ["Price &gt; $5", "20D Avg Vol &gt; 500K", "Fresh cross only"],
+        "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Runs automatically ~15 min after each weekday close",
         "empty_sub": "The scan ran clean — no tickers met all three conditions today. Refresh again after tomorrow's close.",
+    },
+    "insiders": {
+        "results_file": "insider_buys_results.csv",
+        "output_file": "docs/insiders.html",
+        "eyebrow": "Insider Activity · Form 4",
+        "title": "Insider Buying Screener",
+        "sub": "Every SEC Form 4 open-market purchase filed by officers, directors, and 10%+ owners on the most recent business day — option exercises, stock grants, and gifts excluded. Sorted by dollar size, biggest first.",
+        "chips": ["Open-market purchases only", "Min $100K", "Price &gt; $5"],
+        "footer": "Data via SEC EDGAR · Runs automatically every weekday morning, pre-market",
+        "empty_sub": "No qualifying insider purchases met the threshold on the most recent filing day.",
     },
 }
 
 
-def load_results(results_file):
+def load_results(results_file, mode):
     if not os.path.exists(results_file):
         return []
     df = pd.read_csv(results_file)
     if df.empty:
         return []
-    df = df.sort_values("ticker")
+    if mode == "insiders":
+        df = df.sort_values("total_value", ascending=False)
+    else:
+        df = df.sort_values("ticker")
     return df.to_dict(orient="records")
 
 
@@ -57,6 +70,7 @@ def nav_html(active_mode):
     <nav class="top-nav">
       {tab("weekly", "Weekly", "index.html")}
       {tab("daily", "Daily", "daily.html")}
+      {tab("insiders", "Insiders", "insiders.html")}
     </nav>"""
 
 
@@ -66,16 +80,47 @@ def build_html(rows, mode):
     data_json = json.dumps(rows, default=str)
     count = len(rows)
 
-    ticker_tape_items = "".join(
-        f'<span class="tape-item"><span class="tape-ticker">{r["ticker"]}</span>'
-        f'<span class="tape-price">${r["close"]:.2f}</span></span>'
-        for r in rows
-    ) if rows else '<span class="tape-item tape-empty">NO CROSSES DETECTED THIS CYCLE</span>'
+    if mode == "insiders":
+        ticker_tape_items = "".join(
+            f'<span class="tape-item"><span class="tape-ticker">{r["ticker"]}</span>'
+            f'<span class="tape-price">${r["total_value"]:,.0f}</span></span>'
+            for r in rows
+        ) if rows else '<span class="tape-item tape-empty">NO QUALIFYING INSIDER PURCHASES</span>'
+    else:
+        ticker_tape_items = "".join(
+            f'<span class="tape-item"><span class="tape-ticker">{r["ticker"]}</span>'
+            f'<span class="tape-price">${r["close"]:.2f}</span></span>'
+            for r in rows
+        ) if rows else '<span class="tape-item tape-empty">NO CROSSES DETECTED THIS CYCLE</span>'
     ticker_tape_html = ticker_tape_items + ticker_tape_items
 
-    rows_html = ""
-    for r in rows:
-        rows_html += f"""
+    if mode == "insiders":
+        rows_html = ""
+        for r in rows:
+            rows_html += f"""
+        <tr>
+          <td class="col-ticker">{r['ticker']}</td>
+          <td>{r['insider_name']}</td>
+          <td class="mono">{r['title']}</td>
+          <td class="mono">{r['transaction_date']}</td>
+          <td class="mono num">{r['shares']:,.0f}</td>
+          <td class="mono num">${r['price']:.2f}</td>
+          <td class="mono num">${r['total_value']:,.0f}</td>
+        </tr>"""
+        table_headers = """
+            <tr>
+              <th>Ticker</th>
+              <th>Insider</th>
+              <th>Title</th>
+              <th>Transaction Date</th>
+              <th class="num">Shares</th>
+              <th class="num">Price</th>
+              <th class="num">Total Value</th>
+            </tr>"""
+    else:
+        rows_html = ""
+        for r in rows:
+            rows_html += f"""
         <tr>
           <td class="col-ticker">{r['ticker']}</td>
           <td class="mono">{r['close_date']}</td>
@@ -85,6 +130,16 @@ def build_html(rows, mode):
           <td class="mono num">{r['avg_vol']:,}</td>
           <td class="mono num">{r['last_vol']:,}</td>
         </tr>"""
+        table_headers = """
+            <tr>
+              <th>Ticker</th>
+              <th>Cross Date</th>
+              <th class="num">Close</th>
+              <th class="num">SMA 20</th>
+              <th class="num">SMA 50</th>
+              <th class="num">Avg Vol</th>
+              <th class="num">Last Vol</th>
+            </tr>"""
 
     empty_state = f"""
         <div class="empty-state">
@@ -95,16 +150,7 @@ def build_html(rows, mode):
 
     table_block = f"""
         <table class="results">
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Cross Date</th>
-              <th class="num">Close</th>
-              <th class="num">SMA 20</th>
-              <th class="num">SMA 50</th>
-              <th class="num">Avg Vol</th>
-              <th class="num">Last Vol</th>
-            </tr>
+          <thead>{table_headers}
           </thead>
           <tbody>{rows_html}
           </tbody>
@@ -371,9 +417,7 @@ def build_html(rows, mode):
 
   <main>
     <div class="criteria">
-      <span class="chip">Price &gt; $5</span>
-      <span class="chip">{cfg['vol_chip']}</span>
-      <span class="chip">Fresh cross only</span>
+      {"".join(f'<span class="chip">{c}</span>' for c in cfg['chips'])}
     </div>
     {table_block}
   </main>
@@ -396,9 +440,9 @@ def build_html(rows, mode):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the screener dashboard page")
-    parser.add_argument("--mode", choices=["weekly", "daily"], required=True)
+    parser.add_argument("--mode", choices=["weekly", "daily", "insiders"], required=True)
     args = parser.parse_args()
 
     cfg = MODES[args.mode]
-    rows = load_results(cfg["results_file"])
+    rows = load_results(cfg["results_file"], args.mode)
     build_html(rows, args.mode)
