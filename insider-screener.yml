@@ -1,0 +1,47 @@
+name: Insider Buying Screener
+
+on:
+  schedule:
+    # 11:00 UTC, Mon-Fri = 7:00 AM ET during EDT (summer) = 6:00 AM ET during EST (winter).
+    # Either way this lands comfortably pre-market (before 9:30 AM ET open). No adjustment
+    # strictly necessary, but nudge "0 11" to "0 12" in winter if you want it closer to 7 AM ET.
+    - cron: "0 11 * * 1-5"
+  workflow_dispatch: {}  # also lets you click "Run workflow" manually anytime
+
+permissions:
+  contents: write
+
+concurrency:
+  group: insider-screener
+  cancel-in-progress: true
+
+jobs:
+  scan-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests pandas
+
+      - name: Run screener
+        run: python insider_buying_screener.py
+
+      - name: Build dashboard
+        run: python generate_dashboard.py --mode insiders
+
+      - name: Commit and push results
+        run: |
+          git config user.name "screener-bot"
+          git config user.email "screener-bot@users.noreply.github.com"
+          git add docs/insiders.html insider_buys_results.csv
+          git diff --quiet --cached || git commit -m "Insider scan: $(date -u +'%Y-%m-%d')"
+          git pull --rebase origin main
+          git push
