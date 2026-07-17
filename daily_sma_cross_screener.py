@@ -5,10 +5,10 @@ Scans full NYSE + Nasdaq ticker list for bullish 8/21 SMA momentum setups.
 Filters:
   - Price > $5
   - 20-day avg volume > 500,000
-  - Price is ABOVE both the 8MA and 21MA (bullish momentum only)
-  - 8MA is ABOVE 21MA (confirms the cross/alignment)
+  - Price is ABOVE both the 8-day SMA and 21-day SMA
+  - 8-day SMA is ABOVE the 21-day SMA (confirms bullish alignment)
 
-Anything where price is below the 21MA is excluded (not a good momentum play).
+If price is below the 21-day SMA, it's excluded — not a good momentum play.
 """
 
 import pandas as pd
@@ -23,18 +23,16 @@ MIN_PRICE = 5.0
 MIN_AVG_VOLUME = 500_000
 FAST_MA = 8
 SLOW_MA = 21
-LOOKBACK_DAYS = "3mo"   # enough history for 21MA + volume avg
-BATCH_SIZE = 100        # yfinance batch download size
+DOWNLOAD_PERIOD = "3mo"
+BATCH_SIZE = 100
 # -----------------------------
 
 
 def load_tickers(path):
     df = pd.read_csv(path)
-    # auto-detect the ticker column name
     for col in ["Ticker", "Symbol", "ticker", "symbol"]:
         if col in df.columns:
             return df[col].dropna().astype(str).str.upper().str.strip().tolist()
-    # fallback: assume first column
     return df.iloc[:, 0].dropna().astype(str).str.upper().str.strip().tolist()
 
 
@@ -48,7 +46,7 @@ def scan_batch(tickers):
     try:
         data = yf.download(
             tickers,
-            period=LOOKBACK_DAYS,
+            period=DOWNLOAD_PERIOD,
             interval="1d",
             group_by="ticker",
             threads=True,
@@ -72,36 +70,38 @@ def scan_batch(tickers):
             if len(df) < SLOW_MA + 1:
                 continue
 
-            df["MA8"] = df["Close"].rolling(FAST_MA).mean()
-            df["MA21"] = df["Close"].rolling(SLOW_MA).mean()
+            df["SMA8"] = df["Close"].rolling(FAST_MA).mean()
+            df["SMA21"] = df["Close"].rolling(SLOW_MA).mean()
 
             last = df.iloc[-1]
-            price = last["Close"]
-            ma8 = last["MA8"]
-            ma21 = last["MA21"]
+            close = last["Close"]
+            sma8 = last["SMA8"]
+            sma21 = last["SMA21"]
             avg_vol = df["Volume"].tail(20).mean()
+            last_vol = last["Volume"]
+            close_date = df.index[-1].strftime("%Y-%m-%d")
 
-            if pd.isna(ma8) or pd.isna(ma21):
+            if pd.isna(sma8) or pd.isna(sma21):
                 continue
-            if price <= MIN_PRICE:
+            if close <= MIN_PRICE:
                 continue
             if avg_vol <= MIN_AVG_VOLUME:
                 continue
-            if price <= ma21:
-                continue  # below 21MA = not a good momentum play, excluded
-            if price <= ma8:
-                continue  # must be above both MAs
-            if ma8 <= ma21:
-                continue  # must be a bullish 8/21 alignment, not just above price
+            if close <= sma21:
+                continue
+            if close <= sma8:
+                continue
+            if sma8 <= sma21:
+                continue
 
             results.append({
-                "Ticker": ticker,
-                "Price": round(price, 2),
-                "MA8": round(ma8, 2),
-                "MA21": round(ma21, 2),
-                "AvgVolume20D": int(avg_vol),
-                "Signal": "Bullish 8/21 Momentum",
-                "ScanDate": datetime.now().strftime("%Y-%m-%d"),
+                "ticker": ticker,
+                "close_date": close_date,
+                "close": round(close, 2),
+                "sma8": round(sma8, 2),
+                "sma21": round(sma21, 2),
+                "avg_vol": int(avg_vol),
+                "last_vol": int(last_vol),
             })
         except Exception:
             continue
@@ -115,20 +115,3 @@ def main():
 
     all_results = []
     batches = list(chunk_list(tickers, BATCH_SIZE))
-
-    for i, batch in enumerate(batches, 1):
-        print(f"Scanning batch {i}/{len(batches)} ({len(batch)} tickers)...")
-        batch_results = scan_batch(batch)
-        all_results.extend(batch_results)
-        time.sleep(1)  # be polite to yfinance
-
-    df_out = pd.DataFrame(all_results)
-    df_out = df_out.sort_values("AvgVolume20D", ascending=False)
-    df_out.to_csv(OUTPUT_FILE, index=False)
-
-    print(f"Scan complete. {len(df_out)} tickers passed filters.")
-    print(f"Results written to {OUTPUT_FILE}")
-
-
-if __name__ == "__main__":
-    main()
