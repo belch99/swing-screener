@@ -1,0 +1,38 @@
+name: Daily RSI Divergence Screener
+on:
+  schedule:
+    # 20:15 UTC, Mon-Fri = 4:15 PM ET during EDT (summer). During EST (winter, roughly
+    # early Nov - mid March) this fires at 3:15 PM ET instead - change "15 20" to "15 21"
+    # when clocks fall back in November, and back to "15 20" when they spring forward in March.
+    - cron: "15 20 * * 1-5"
+  workflow_dispatch: {}  # also lets you click "Run workflow" manually anytime
+permissions:
+  contents: write
+concurrency:
+  group: daily-rsi-screener
+  cancel-in-progress: true
+jobs:
+  scan-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install yfinance pandas
+      - name: Run screener
+        run: python daily_rsi_divergence_screener.py
+      - name: Build dashboard
+        run: python generate_dashboard.py --mode rsi_divergence
+      - name: Commit and push results
+        run: |
+          git config user.name "screener-bot"
+          git config user.email "screener-bot@users.noreply.github.com"
+          git add docs/rsi_divergence.html daily_rsi_divergence_results.csv
+          git diff --quiet --cached || git commit -m "Daily RSI divergence scan: $(date -u +'%Y-%m-%d')"
+          git pull --rebase origin main
+          git push
