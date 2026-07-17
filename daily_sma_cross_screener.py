@@ -1,150 +1,133 @@
 """
-Daily 20/50 SMA Cross Screener
---------------------------------
-Scans NASDAQ + NYSE listed stocks for a daily close where the 20-day SMA
-crosses above the 50-day SMA (a "golden cross" on the daily timeframe).
+daily_sma_cross_screener.py
+Scans full NYSE + Nasdaq ticker list for bullish 8/21 SMA momentum setups.
 
-Filters applied:
-  - Last close > $5
-  - 20-day average volume > 500,000
-  - Cross must have happened on the MOST RECENTLY CLOSED daily bar
+Filters:
+  - Price > $5
+  - 20-day avg volume > 500,000
+  - Price is ABOVE both the 8MA and 21MA (bullish momentum only)
+  - 8MA is ABOVE 21MA (confirms the cross/alignment)
 
-Data source: Yahoo Finance via the free `yfinance` library. No API key needed.
-
-SETUP (run once):
-    pip install yfinance pandas
-
-RUN:
-    python daily_sma_cross_screener.py
-
-    Optional flags:
-    python daily_sma_cross_screener.py --tickers all_tickers.csv --min-price 5 --min-avg-vol 500000
-
-Output:
-    Prints matches to the console and saves them to daily_cross_results.csv
+Anything where price is below the 21MA is excluded (not a good momentum play).
 """
 
-import argparse
-import socket
-import sys
-import time
 import pandas as pd
 import yfinance as yf
+from datetime import datetime
+import time
 
-socket.setdefaulttimeout(30)  # hard ceiling on any network call so a stalled request fails fast instead of hanging
+# ---------- CONFIG ----------
+TICKERS_FILE = "all_tickers.csv"
+OUTPUT_FILE = "daily_cross_results.csv"
+MIN_PRICE = 5.0
+MIN_AVG_VOLUME = 500_000
+FAST_MA = 8
+SLOW_MA = 21
+LOOKBACK_DAYS = "3mo"   # enough history for 21MA + volume avg
+BATCH_SIZE = 100        # yfinance batch download size
+# -----------------------------
 
-CHUNK_SIZE = 200          # tickers per batch download (keeps requests stable)
-LOOKBACK_PERIOD = "1y"    # enough daily bars to compute a 50-day SMA reliably
 
-
-def load_tickers(path: str) -> list[str]:
+def load_tickers(path):
     df = pd.read_csv(path)
-    tickers = df["ticker"].dropna().astype(str).str.upper().tolist()
-    # Drop obvious non-common-stock symbols: warrants, units, rights, when-issued, preferreds
-    cleaned = [t for t in tickers if t.isalpha() and 1 <= len(t) <= 5]
-    return sorted(set(cleaned))
+    # auto-detect the ticker column name
+    for col in ["Ticker", "Symbol", "ticker", "symbol"]:
+        if col in df.columns:
+            return df[col].dropna().astype(str).str.upper().str.strip().tolist()
+    # fallback: assume first column
+    return df.iloc[:, 0].dropna().astype(str).str.upper().str.strip().tolist()
 
 
-def chunk(lst, size):
+def chunk_list(lst, size):
     for i in range(0, len(lst), size):
         yield lst[i:i + size]
 
 
-def screen_batch(tickers, min_price, min_avg_vol):
-    matches = []
+def scan_batch(tickers):
+    results = []
     try:
         data = yf.download(
-            tickers=tickers,
-            period=LOOKBACK_PERIOD,
+            tickers,
+            period=LOOKBACK_DAYS,
             interval="1d",
             group_by="ticker",
             threads=True,
             progress=False,
             auto_adjust=True,
-            timeout=30,
         )
     except Exception as e:
-        print(f"  batch download failed: {e}", file=sys.stderr)
-        return matches
+        print(f"Batch download failed: {e}")
+        return results
 
-    for t in tickers:
+    for ticker in tickers:
         try:
             if len(tickers) == 1:
                 df = data
             else:
-                df = data[t]
-            df = df.dropna(how="all")
-            if df.empty or len(df) < 51:  # need 51+ daily bars for a reliable 50-day SMA
+                if ticker not in data.columns.get_level_values(0):
+                    continue
+                df = data[ticker]
+
+            df = df.dropna(subset=["Close", "Volume"])
+            if len(df) < SLOW_MA + 1:
                 continue
 
-            close = df["Close"]
-            volume = df["Volume"]
+            df["MA8"] = df["Close"].rolling(FAST_MA).mean()
+            df["MA21"] = df["Close"].rolling(SLOW_MA).mean()
 
-            sma20 = close.rolling(20).mean()
-            sma50 = close.rolling(50).mean()
+            last = df.iloc[-1]
+            price = last["Close"]
+            ma8 = last["MA8"]
+            ma21 = last["MA21"]
+            avg_vol = df["Volume"].tail(20).mean()
 
-            if len(sma20) < 2 or pd.isna(sma20.iloc[-1]) or pd.isna(sma50.iloc[-1]):
+            if pd.isna(ma8) or pd.isna(ma21):
                 continue
-            if pd.isna(sma20.iloc[-2]) or pd.isna(sma50.iloc[-2]):
+            if price <= MIN_PRICE:
                 continue
-
-            last_close = close.iloc[-1]
-            if last_close <= min_price:
+            if avg_vol <= MIN_AVG_VOLUME:
                 continue
+            if price <= ma21:
+                continue  # below 21MA = not a good momentum play, excluded
+            if price <= ma8:
+                continue  # must be above both MAs
+            if ma8 <= ma21:
+                continue  # must be a bullish 8/21 alignment, not just above price
 
-            avg_vol = volume.rolling(20).mean().iloc[-1]
-            if pd.isna(avg_vol) or avg_vol <= min_avg_vol:
-                continue
-
-            crossed_today = sma20.iloc[-2] <= sma50.iloc[-2] and sma20.iloc[-1] > sma50.iloc[-1]  # "today" = most recent daily close
-            if not crossed_today:
-                continue
-
-            last_vol = volume.iloc[-1]
-
-            matches.append({
-                "ticker": t,
-                "close_date": df.index[-1].date(),
-                "close": round(float(last_close), 2),
-                "sma20": round(float(sma20.iloc[-1]), 2),
-                "sma50": round(float(sma50.iloc[-1]), 2),
-                "avg_vol": int(avg_vol),
-                "last_vol": int(last_vol),
+            results.append({
+                "Ticker": ticker,
+                "Price": round(price, 2),
+                "MA8": round(ma8, 2),
+                "MA21": round(ma21, 2),
+                "AvgVolume20D": int(avg_vol),
+                "Signal": "Bullish 8/21 Momentum",
+                "ScanDate": datetime.now().strftime("%Y-%m-%d"),
             })
         except Exception:
             continue
 
-    return matches
+    return results
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Daily 20/50 SMA cross screener")
-    parser.add_argument("--tickers", default="all_tickers.csv", help="CSV file with a 'ticker' column")
-    parser.add_argument("--min-price", type=float, default=5.0)
-    parser.add_argument("--min-avg-vol", type=float, default=500_000)
-    parser.add_argument("--output", default="daily_cross_results.csv")
-    args = parser.parse_args()
+    tickers = load_tickers(TICKERS_FILE)
+    print(f"Loaded {len(tickers)} tickers from {TICKERS_FILE}")
 
-    tickers = load_tickers(args.tickers)
-    print(f"Loaded {len(tickers)} tickers. Scanning in batches of {CHUNK_SIZE}...")
+    all_results = []
+    batches = list(chunk_list(tickers, BATCH_SIZE))
 
-    all_matches = []
-    batches = list(chunk(tickers, CHUNK_SIZE))
     for i, batch in enumerate(batches, 1):
-        print(f"  batch {i}/{len(batches)} ({len(batch)} tickers)...")
-        matches = screen_batch(batch, args.min_price, args.min_avg_vol)
-        all_matches.extend(matches)
-        time.sleep(1)  # small pause to be polite to Yahoo's endpoint
+        print(f"Scanning batch {i}/{len(batches)} ({len(batch)} tickers)...")
+        batch_results = scan_batch(batch)
+        all_results.extend(batch_results)
+        time.sleep(1)  # be polite to yfinance
 
-    if not all_matches:
-        print("\nNo matches found today.")
-        return
+    df_out = pd.DataFrame(all_results)
+    df_out = df_out.sort_values("AvgVolume20D", ascending=False)
+    df_out.to_csv(OUTPUT_FILE, index=False)
 
-    result_df = pd.DataFrame(all_matches).sort_values("ticker")
-    result_df.to_csv(args.output, index=False)
-
-    print(f"\nFound {len(result_df)} matches. Saved to {args.output}\n")
-    print(result_df.to_string(index=False))
+    print(f"Scan complete. {len(df_out)} tickers passed filters.")
+    print(f"Results written to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
