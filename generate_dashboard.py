@@ -25,16 +25,24 @@ MODES = {
         "chips": ["Price &gt; $5", "20W Avg Vol &gt; 500K", "Fresh cross only"],
         "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Runs every Saturday via GitHub Actions",
         "empty_sub": "The scan ran clean — no tickers met all three conditions this week. Check back next Saturday.",
+        "fast_col": "sma20",
+        "slow_col": "sma50",
+        "fast_label": "SMA 20",
+        "slow_label": "SMA 50",
     },
     "daily": {
         "results_file": "daily_cross_results.csv",
         "output_file": "docs/daily.html",
-        "eyebrow": "Daily Scan · Golden Cross",
-        "title": "20/50 Daily SMA Screener",
-        "sub": "Scans every NASDAQ and NYSE listed stock for a 20-day SMA closing above the 50-day SMA on the most recently closed daily bar — filtered for price above $5 and average volume above 500K.",
-        "chips": ["Price &gt; $5", "20D Avg Vol &gt; 500K", "Fresh cross only"],
-        "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Runs automatically ~15 min after each weekday close",
-        "empty_sub": "The scan ran clean — no tickers met all three conditions today. Refresh again after tomorrow's close.",
+        "eyebrow": "Daily Scan · 8/21 Momentum",
+        "title": "8/21 Daily SMA Screener",
+        "sub": "Scans every NASDAQ and NYSE listed stock for price trading above both the 8-day and 21-day SMA, with the 8-day SMA above the 21-day SMA — filtered for price above $5 and average volume above 500K.",
+        "chips": ["Price &gt; $5", "20D Avg Vol &gt; 500K", "Price above 8 &amp; 21 SMA"],
+        "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Runs automatically at 4:00 PM ET market close",
+        "empty_sub": "The scan ran clean — no tickers met all conditions today. Refresh again after tomorrow's close.",
+        "fast_col": "sma8",
+        "slow_col": "sma21",
+        "fast_label": "SMA 8",
+        "slow_label": "SMA 21",
     },
     "insiders": {
         "results_file": "insider_buys_results.csv",
@@ -118,6 +126,8 @@ def build_html(rows, mode):
               <th class="num">Total Value</th>
             </tr>"""
     else:
+        fast_col = cfg["fast_col"]
+        slow_col = cfg["slow_col"]
         rows_html = ""
         for r in rows:
             rows_html += f"""
@@ -125,18 +135,18 @@ def build_html(rows, mode):
           <td class="col-ticker">{r['ticker']}</td>
           <td class="mono">{r['close_date']}</td>
           <td class="mono num">${r['close']:.2f}</td>
-          <td class="mono num">{r['sma20']:.2f}</td>
-          <td class="mono num">{r['sma50']:.2f}</td>
+          <td class="mono num">{r[fast_col]:.2f}</td>
+          <td class="mono num">{r[slow_col]:.2f}</td>
           <td class="mono num">{r['avg_vol']:,}</td>
           <td class="mono num">{r['last_vol']:,}</td>
         </tr>"""
-        table_headers = """
+        table_headers = f"""
             <tr>
               <th>Ticker</th>
               <th>Cross Date</th>
               <th class="num">Close</th>
-              <th class="num">SMA 20</th>
-              <th class="num">SMA 50</th>
+              <th class="num">{cfg['fast_label']}</th>
+              <th class="num">{cfg['slow_label']}</th>
               <th class="num">Avg Vol</th>
               <th class="num">Last Vol</th>
             </tr>"""
@@ -304,145 +314,4 @@ def build_html(rows, mode):
     margin-bottom: 32px;
   }}
   .chip {{
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
-    color: var(--text-dim);
-    border: 1px solid var(--line);
-    border-radius: 100px;
-    padding: 6px 14px;
-    background: var(--surface);
-  }}
-
-  table.results {{
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    overflow: hidden;
-  }}
-  table.results thead th {{
-    text-align: left;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface-raised);
-  }}
-  table.results th.num, table.results td.num {{ text-align: right; }}
-  table.results tbody tr {{
-    border-bottom: 1px solid var(--line);
-    transition: background 0.15s ease;
-  }}
-  table.results tbody tr:last-child {{ border-bottom: none; }}
-  table.results tbody tr:hover {{ background: var(--surface-raised); }}
-  table.results td {{
-    padding: 14px 18px;
-    font-size: 14px;
-  }}
-  td.col-ticker {{
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    font-size: 15px;
-  }}
-  td.mono {{ font-family: 'IBM Plex Mono', monospace; color: var(--text-dim); }}
-  td.mono.num {{ color: var(--text); }}
-
-  .empty-state {{
-    text-align: center;
-    padding: 90px 24px;
-    border: 1px dashed var(--line);
-    border-radius: 8px;
-  }}
-  .empty-glyph {{
-    font-size: 32px;
-    color: var(--accent-dim);
-    margin-bottom: 16px;
-  }}
-  .empty-title {{
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }}
-  .empty-sub {{
-    color: var(--text-dim);
-    font-size: 14px;
-    max-width: 380px;
-    margin: 0 auto;
-    line-height: 1.5;
-  }}
-
-  footer {{
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 0 24px 60px;
-    color: var(--text-dim);
-    font-size: 12px;
-    font-family: 'IBM Plex Mono', monospace;
-  }}
-
-  @media (max-width: 700px) {{
-    h1 {{ font-size: 30px; }}
-    table.results {{ display: block; overflow-x: auto; }}
-    .meta-row {{ gap: 20px; }}
-  }}
-</style>
-</head>
-<body>
-
-  <div class="tape-wrap">
-    <div class="tape-track">{ticker_tape_html}</div>
-  </div>
-  {nav_html(mode)}
-
-  <header>
-    <div class="eyebrow">{cfg['eyebrow']}</div>
-    <h1>{cfg['title']}</h1>
-    <p class="sub">{cfg['sub']}</p>
-    <div class="meta-row">
-      <div class="meta-item">
-        <div class="meta-label">Last run</div>
-        <div class="meta-value">{run_time}</div>
-      </div>
-      <div class="meta-item">
-        <div class="meta-label">Matches</div>
-        <div class="meta-value accent">{count}</div>
-      </div>
-    </div>
-  </header>
-
-  <main>
-    <div class="criteria">
-      {"".join(f'<span class="chip">{c}</span>' for c in cfg['chips'])}
-    </div>
-    {table_block}
-  </main>
-
-  <footer>
-    {cfg['footer']}
-  </footer>
-
-<script>
-  window.SCREENER_DATA = {data_json};
-</script>
-</body>
-</html>"""
-
-    os.makedirs("docs", exist_ok=True)
-    with open(cfg["output_file"], "w") as f:
-        f.write(html)
-    print(f"Dashboard written to {cfg['output_file']} ({count} matches)")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Build the screener dashboard page")
-    parser.add_argument("--mode", choices=["weekly", "daily", "insiders"], required=True)
-    args = parser.parse_args()
-
-    cfg = MODES[args.mode]
-    rows = load_results(cfg["results_file"], args.mode)
-    build_html(rows, args.mode)
+    font-family: 'IBM Plex Mono',
