@@ -1,14 +1,17 @@
 """
 daily_sma_cross_screener.py
-Scans full NYSE + Nasdaq ticker list for bullish 8/21 SMA momentum setups.
+Scans full NYSE + Nasdaq ticker list for a FRESH bullish 8/21 SMA cross
+that happened on the most recently closed daily bar (i.e. the cross
+occurred TODAY at the close, not days ago).
 
-Filters:
+A ticker qualifies only if:
   - Price > $5
   - 20-day avg volume > 500,000
-  - Price is ABOVE both the 8-day SMA and 21-day SMA
-  - 8-day SMA is ABOVE the 21-day SMA (confirms bullish alignment)
-
-If price is below the 21-day SMA, it's excluded — not a good momentum play.
+  - Price is ABOVE both the 8-day SMA and 21-day SMA today
+  - Today's 8-day SMA is ABOVE today's 21-day SMA
+  - Yesterday's 8-day SMA was BELOW OR EQUAL to yesterday's 21-day SMA
+    (this is what confirms the cross just happened, not that it's been
+    running for days)
 """
 
 import pandas as pd
@@ -67,39 +70,48 @@ def scan_batch(tickers):
                 df = data[ticker]
 
             df = df.dropna(subset=["Close", "Volume"])
-            if len(df) < SLOW_MA + 1:
+            if len(df) < SLOW_MA + 2:
                 continue
 
             df["SMA8"] = df["Close"].rolling(FAST_MA).mean()
             df["SMA21"] = df["Close"].rolling(SLOW_MA).mean()
 
-            last = df.iloc[-1]
-            close = last["Close"]
-            sma8 = last["SMA8"]
-            sma21 = last["SMA21"]
+            today = df.iloc[-1]
+            yesterday = df.iloc[-2]
+
+            close = today["Close"]
+            sma8_today = today["SMA8"]
+            sma21_today = today["SMA21"]
+            sma8_yday = yesterday["SMA8"]
+            sma21_yday = yesterday["SMA21"]
             avg_vol = df["Volume"].tail(20).mean()
-            last_vol = last["Volume"]
+            last_vol = today["Volume"]
             close_date = df.index[-1].strftime("%Y-%m-%d")
 
-            if pd.isna(sma8) or pd.isna(sma21):
+            if pd.isna(sma8_today) or pd.isna(sma21_today):
+                continue
+            if pd.isna(sma8_yday) or pd.isna(sma21_yday):
                 continue
             if close <= MIN_PRICE:
                 continue
             if avg_vol <= MIN_AVG_VOLUME:
                 continue
-            if close <= sma21:
+            if close <= sma21_today:
                 continue
-            if close <= sma8:
+            if close <= sma8_today:
                 continue
-            if sma8 <= sma21:
+            if sma8_today <= sma21_today:
+                continue
+            # FRESH CROSS CHECK: yesterday it was NOT yet above, today it is
+            if sma8_yday > sma21_yday:
                 continue
 
             results.append({
                 "ticker": ticker,
                 "close_date": close_date,
                 "close": round(close, 2),
-                "sma8": round(sma8, 2),
-                "sma21": round(sma21, 2),
+                "sma8": round(sma8_today, 2),
+                "sma21": round(sma21_today, 2),
                 "avg_vol": int(avg_vol),
                 "last_vol": int(last_vol),
             })
@@ -127,7 +139,7 @@ def main():
         df_out = df_out.sort_values("ticker")
     df_out.to_csv(OUTPUT_FILE, index=False)
 
-    print(f"Scan complete. {len(df_out)} tickers passed filters.")
+    print(f"Scan complete. {len(df_out)} fresh crosses found today.")
     print(f"Results written to {OUTPUT_FILE}")
 
 
