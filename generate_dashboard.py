@@ -6,6 +6,8 @@ GitHub Pages serves whatever is in docs/.
 Usage:
     python generate_dashboard.py --mode weekly
     python generate_dashboard.py --mode daily
+    python generate_dashboard.py --mode insiders
+    python generate_dashboard.py --mode rsi_divergence
 """
 
 import argparse
@@ -35,10 +37,10 @@ MODES = {
         "output_file": "docs/daily.html",
         "eyebrow": "Daily Scan · 8/21 Momentum",
         "title": "8/21 Daily SMA Screener",
-        "sub": "Scans every NASDAQ and NYSE listed stock for price trading above both the 8-day and 21-day SMA, with the 8-day SMA above the 21-day SMA — filtered for price above $5 and average volume above 500K.",
-        "chips": ["Price &gt; $5", "20D Avg Vol &gt; 500K", "Price above 8 &amp; 21 SMA"],
+        "sub": "Scans every NASDAQ and NYSE listed stock for a FRESH bullish 8/21 SMA cross that happened on the most recently closed daily bar — filtered for price above $5 and average volume above 500K.",
+        "chips": ["Price &gt; $5", "20D Avg Vol &gt; 500K", "Fresh cross only"],
         "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Runs automatically at 4:00 PM ET market close",
-        "empty_sub": "The scan ran clean — no tickers met all conditions today. Refresh again after tomorrow's close.",
+        "empty_sub": "The scan ran clean — no fresh crosses today. Refresh again after tomorrow's close.",
         "fast_col": "sma8",
         "slow_col": "sma21",
         "fast_label": "SMA 8",
@@ -53,6 +55,16 @@ MODES = {
         "chips": ["Open-market purchases only", "Min $100K", "Price &gt; $5"],
         "footer": "Data via SEC EDGAR · Runs automatically every weekday morning, pre-market",
         "empty_sub": "No qualifying insider purchases met the threshold on the most recent filing day.",
+    },
+    "rsi_divergence": {
+        "results_file": "daily_rsi_divergence_results.csv",
+        "output_file": "docs/rsi_divergence.html",
+        "eyebrow": "Daily Scan · Bullish Divergence",
+        "title": "Bullish RSI Divergence Screener",
+        "sub": "Scans every NASDAQ and NYSE listed stock for price making a lower low while RSI(14) makes a higher low — a fresh sign that selling momentum is fading before price turns. Filtered for price above $5 and average volume above 500K.",
+        "chips": ["Price &gt; $5", "20D Avg Vol &gt; 500K", "Fresh divergence only"],
+        "footer": "NASDAQ + NYSE · Data via Yahoo Finance · Runs automatically at 4:00 PM ET market close",
+        "empty_sub": "The scan ran clean — no fresh bullish divergences today. Refresh again after tomorrow's close.",
     },
 }
 
@@ -78,6 +90,7 @@ def nav_html(active_mode):
     <nav class="top-nav">
       {tab("weekly", "Weekly", "index.html")}
       {tab("daily", "Daily", "daily.html")}
+      {tab("rsi_divergence", "RSI Divergence", "rsi_divergence.html")}
       {tab("insiders", "Insiders", "insiders.html")}
     </nav>"""
 
@@ -99,7 +112,7 @@ def build_html(rows, mode):
             f'<span class="tape-item"><span class="tape-ticker">{r["ticker"]}</span>'
             f'<span class="tape-price">${r["close"]:.2f}</span></span>'
             for r in rows
-        ) if rows else '<span class="tape-item tape-empty">NO CROSSES DETECTED THIS CYCLE</span>'
+        ) if rows else '<span class="tape-item tape-empty">NO SIGNALS DETECTED THIS CYCLE</span>'
     ticker_tape_html = ticker_tape_items + ticker_tape_items
 
     if mode == "insiders":
@@ -124,6 +137,33 @@ def build_html(rows, mode):
               <th class="num">Shares</th>
               <th class="num">Price</th>
               <th class="num">Total Value</th>
+            </tr>"""
+    elif mode == "rsi_divergence":
+        rows_html = ""
+        for r in rows:
+            rows_html += f"""
+        <tr>
+          <td class="col-ticker">{r['ticker']}</td>
+          <td class="mono">{r['close_date']}</td>
+          <td class="mono num">${r['close']:.2f}</td>
+          <td class="mono num">{r['current_rsi']:.1f}</td>
+          <td class="mono num">${r['price_low1']:.2f}</td>
+          <td class="mono num">${r['price_low2']:.2f}</td>
+          <td class="mono num">{r['rsi_low1']:.1f}</td>
+          <td class="mono num">{r['rsi_low2']:.1f}</td>
+          <td class="mono num">{r['avg_vol']:,}</td>
+        </tr>"""
+        table_headers = """
+            <tr>
+              <th>Ticker</th>
+              <th>Date</th>
+              <th class="num">Close</th>
+              <th class="num">Current RSI</th>
+              <th class="num">Price Low 1</th>
+              <th class="num">Price Low 2</th>
+              <th class="num">RSI Low 1</th>
+              <th class="num">RSI Low 2</th>
+              <th class="num">Avg Vol</th>
             </tr>"""
     else:
         fast_col = cfg["fast_col"]
@@ -154,7 +194,7 @@ def build_html(rows, mode):
     empty_state = f"""
         <div class="empty-state">
           <div class="empty-glyph">◇</div>
-          <div class="empty-title">No crosses this cycle</div>
+          <div class="empty-title">No signals this cycle</div>
           <div class="empty-sub">{cfg['empty_sub']}</div>
         </div>""" if not rows else ""
 
@@ -232,6 +272,7 @@ def build_html(rows, mode):
     padding: 20px 24px 0;
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
   }}
   .nav-tab {{
     font-family: 'IBM Plex Mono', monospace;
@@ -450,7 +491,7 @@ def build_html(rows, mode):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the screener dashboard page")
-    parser.add_argument("--mode", choices=["weekly", "daily", "insiders"], required=True)
+    parser.add_argument("--mode", choices=["weekly", "daily", "insiders", "rsi_divergence"], required=True)
     args = parser.parse_args()
 
     cfg = MODES[args.mode]
