@@ -115,3 +115,21 @@ def main():
 
     all_results = []
     batches = list(chunk_list(tickers, BATCH_SIZE))
+
+    for i, batch in enumerate(batches, 1):
+        print(f"Scanning batch {i}/{len(batches)} ({len(batch)} tickers)...")
+        batch_results = scan_batch(batch)
+        all_results.extend(batch_results)
+        time.sleep(1)
+
+    df_out = pd.DataFrame(all_results)
+    if not df_out.empty:
+        df_out = df_out.sort_values("ticker")
+    df_out.to_csv(OUTPUT_FILE, index=False)
+
+    print(f"Scan complete. {len(df_out)} tickers passed filters.")
+    print(f"Results written to {OUTPUT_FILE}")
+
+
+if __name__ == "__main__":
+    main()
