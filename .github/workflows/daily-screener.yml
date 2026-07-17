@@ -1,5 +1,4 @@
 name: Daily SMA Cross Screener
-
 on:
   schedule:
     # 20:15 UTC, Mon-Fri = 4:15 PM ET during EDT (summer). During EST (winter, roughly
@@ -7,14 +6,11 @@ on:
     # when clocks fall back in November, and back to "15 20" when they spring forward in March.
     - cron: "15 20 * * 1-5"
   workflow_dispatch: {}  # also lets you click "Run workflow" manually anytime
-
 permissions:
   contents: write
-
 concurrency:
-  group: daily-screener
+  group: daily-sma-screener
   cancel-in-progress: true
-
 jobs:
   scan-and-publish:
     runs-on: ubuntu-latest
@@ -22,26 +18,21 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: pip install yfinance pandas
-
       - name: Run screener
-        run: python daily_sma_cross_screener.py --tickers all_tickers.csv
-
+        run: python daily_sma_cross_screener.py
       - name: Build dashboard
         run: python generate_dashboard.py --mode daily
-
       - name: Commit and push results
         run: |
           git config user.name "screener-bot"
           git config user.email "screener-bot@users.noreply.github.com"
           git add docs/daily.html daily_cross_results.csv
-          git diff --quiet --cached || git commit -m "Daily scan: $(date -u +'%Y-%m-%d')"
+          git diff --quiet --cached || git commit -m "Daily SMA scan: $(date -u +'%Y-%m-%d')"
           git pull --rebase origin main
           git push
