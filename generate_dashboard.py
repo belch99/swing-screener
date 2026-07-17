@@ -314,4 +314,145 @@ def build_html(rows, mode):
     margin-bottom: 32px;
   }}
   .chip {{
-    font-family: 'IBM Plex Mono',
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    border-radius: 100px;
+    padding: 6px 14px;
+    background: var(--surface);
+  }}
+
+  table.results {{
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }}
+  table.results thead th {{
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-raised);
+  }}
+  table.results th.num, table.results td.num {{ text-align: right; }}
+  table.results tbody tr {{
+    border-bottom: 1px solid var(--line);
+    transition: background 0.15s ease;
+  }}
+  table.results tbody tr:last-child {{ border-bottom: none; }}
+  table.results tbody tr:hover {{ background: var(--surface-raised); }}
+  table.results td {{
+    padding: 14px 18px;
+    font-size: 14px;
+  }}
+  td.col-ticker {{
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+  }}
+  td.mono {{ font-family: 'IBM Plex Mono', monospace; color: var(--text-dim); }}
+  td.mono.num {{ color: var(--text); }}
+
+  .empty-state {{
+    text-align: center;
+    padding: 90px 24px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+  }}
+  .empty-glyph {{
+    font-size: 32px;
+    color: var(--accent-dim);
+    margin-bottom: 16px;
+  }}
+  .empty-title {{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }}
+  .empty-sub {{
+    color: var(--text-dim);
+    font-size: 14px;
+    max-width: 380px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }}
+
+  footer {{
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 60px;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+  }}
+
+  @media (max-width: 700px) {{
+    h1 {{ font-size: 30px; }}
+    table.results {{ display: block; overflow-x: auto; }}
+    .meta-row {{ gap: 20px; }}
+  }}
+</style>
+</head>
+<body>
+
+  <div class="tape-wrap">
+    <div class="tape-track">{ticker_tape_html}</div>
+  </div>
+  {nav_html(mode)}
+
+  <header>
+    <div class="eyebrow">{cfg['eyebrow']}</div>
+    <h1>{cfg['title']}</h1>
+    <p class="sub">{cfg['sub']}</p>
+    <div class="meta-row">
+      <div class="meta-item">
+        <div class="meta-label">Last run</div>
+        <div class="meta-value">{run_time}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Matches</div>
+        <div class="meta-value accent">{count}</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="criteria">
+      {"".join(f'<span class="chip">{c}</span>' for c in cfg['chips'])}
+    </div>
+    {table_block}
+  </main>
+
+  <footer>
+    {cfg['footer']}
+  </footer>
+
+<script>
+  window.SCREENER_DATA = {data_json};
+</script>
+</body>
+</html>"""
+
+    os.makedirs("docs", exist_ok=True)
+    with open(cfg["output_file"], "w") as f:
+        f.write(html)
+    print(f"Dashboard written to {cfg['output_file']} ({count} matches)")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Build the screener dashboard page")
+    parser.add_argument("--mode", choices=["weekly", "daily", "insiders"], required=True)
+    args = parser.parse_args()
+
+    cfg = MODES[args.mode]
+    rows = load_results(cfg["results_file"], args.mode)
+    build_html(rows, args.mode)
